@@ -1,0 +1,8 @@
+Este tiene unas ecuaciones de física 1 y no parece tan difícil.
+http://www.freescale.com/files/sensors/doc/app_note/AN3461.pdf  
+
+En el último .zip hacen unas cosas raras para calcular el ángulo.
+http://letsmakerobots.com/node/33979
+
+Otro que usa lo de pitch y roll que vimos el otro día
+http://www.st.com/web/en/resource/technical/document/application_note/CD00268887.pdf
