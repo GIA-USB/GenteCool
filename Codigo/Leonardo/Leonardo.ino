@@ -11,22 +11,19 @@ int eD=6; /* pin enable del puente H para el motor derecho*/
 int eI=10; /* pin enable para el motor izquierdo */
 
 AcceleroMMA7361 accelero;
-int x, y ,z;
 double pitch, roll;
 int angulo;
-int minVel = 30;
+int minVel = 60;
+int minVelX = 100;
 
-int pos = 0;
-int dir = 1;
-
-double last_proportionalX;
-double integralX;
-double derivativeX;
-double proportionalX;
-double last_proportionalY;
-double integralY;
-double derivativeY;
-double proportionalY;
+double last_proportionalX = 0;
+double integralX = 0;
+double derivativeX = 0;
+double proportionalX = 0;
+double last_proportionalY = 0;
+double integralY = 0;
+double derivativeY = 0;
+double proportionalY = 0;
 
 void adelante(int velI, int velD){
 
@@ -67,7 +64,7 @@ analogWrite(eI,velI);
 digitalWrite(motorda,LOW);
 digitalWrite(motori,LOW);
 delay(5);
-digitalWrite(motord,LOW);
+digitalWrite(motord,HIGH);
 digitalWrite(motoria,HIGH);
 }
 
@@ -82,7 +79,7 @@ digitalWrite(motord,LOW);
 digitalWrite(motoria,LOW);
 delay(5);
 digitalWrite(motorda,HIGH);
-digitalWrite(motori,LOW);
+digitalWrite(motori,HIGH);
 }
 
 void parar(){
@@ -92,43 +89,14 @@ analogWrite(eI,0);
 
 }
 
-int offSet = 0;
-
-int get_angulo()
-{
-    x = accelero.getXAccel();
-    y = accelero.getYAccel();
-    z = accelero.getZAccel();
-    x = analogRead(A2);
-    y = analogRead(A1);
-    z = analogRead(A0);
-    x = (30 * (analogRead(A2) -75  -512)) / 128 * 5 / 4;
-    y = (30 * (analogRead(A1) -78  -512)) / 128 * 5 / 4;
-    z = (30 * (analogRead(A0) +126  -512)) / 128 * 5 / 4;
-    //Serial.print("\nx: ");
-    //Serial.print(x);
-    y = (accelero.getYRaw()-offSet) / 2 * 7;
-    //Serial.print(" \ny: ");
-    //Serial.print(y);
-    //Serial.print(" \tz: ");
-    //Serial.print(z);
-    //Serial.print("\tG*10^-2");
-    
-    double angulo = sqrt(pow(x,2)+pow(y,2)+pow(z,2));
-    angulo = angulo / z;
-    angulo = 1 / cos(angulo);
-    
-    //Serial.print("\tangulo ");
-    //Serial.print(angulo, 8);
-
-    return y;
-}
 
 void getAngulo2(){
+    int x, y ,z;
+    
     x = accelero.getXAccel();
     y = accelero.getYAccel();
     z = accelero.getZAccel();
-
+    
     pitch = atan2(x,sqrt(pow(y,2))+pow(z,2));
     roll = atan2(y,sqrt(pow(x,2))+pow(z,2));
 
@@ -152,53 +120,100 @@ void setup() {
     Serial.begin(9600);
     Serial.println("Initiating...");
     // "OK" Led:
-    pinMode(ok_led, OUTPUT);
+    //pinMode(ok_led, OUTPUT);
 
     //sleepPin = 13, selfTestPin = 12, zeroGPin = 9, gSelectPin = 8
     //xPin = A2, yPin = A1, zPin = A0
     accelero.begin(13, 12, 9, 8, A2, A1, A0);
     accelero.calibrate();
-    offSet = accelero.getYRaw();
     Serial.println("Initiated");
     
 
 }
 
+/*
+ * power_difference > 0 => Atras
+ */
 void loop()
 {
-    getAngulo2();
-   
-    proportionalY = roll; 
+    getAngulo2();  
+
+    proportionalX = pitch + 0.35;
+    derivativeX = proportionalX - last_proportionalX;
+    integralX = integralX - proportionalX;
+    last_proportionalX = proportionalX;
+    
+    double kpX = 7.42;
+    double kiX = 0.742;
+    double kdX = 2.42;
+    double power_difference;
+    int nuevaVel;
+    power_difference = proportionalX*kpX + integralX*kiX + derivativeX*kdX;
+    //power_difference = proportionalX*kpX + derivativeX*kdX;
+    nuevaVel = abs(int(power_difference))+minVelX;
+    
+    if (power_difference >  255){
+      power_difference = 255;
+      nuevaVel = 255;
+    } else if (power_difference < -255){
+      power_difference = -255;
+      nuevaVel = 255;
+    }
+    if (nuevaVel > 255){
+      nuevaVel = 255;
+    }
+    
+    if (pitch > 0){
+      derecha(nuevaVel,nuevaVel);
+      //Serial.println("Derecha");
+      delay(10);
+    } else if (pitch < -0.70){
+      izquierda(nuevaVel,nuevaVel);
+      //Serial.println("Izquierda");
+      delay(10);
+    } else {
+      parar();
+      //Serial.println("Parar");
+    }
+    
+    proportionalY = roll + 0.35; 
     derivativeY = proportionalY - last_proportionalY;
-    integralY += proportionalY;
+    //integralY = integralY - proportionalY;
     last_proportionalY = proportionalY;
     
-    double kp = 1; //1/10
-    double ki = 0; //1/10000
-    double kd = 0; //3/2
-    double power_difference = proportionalY*kp + integralY*ki + derivativeY*kd;
-    //double power_difference = proportional*kp + derivative*kd;
-    int nuevaVel;
+    double kpY = 5.8; //1/10
+    double kiY = 0.070; //1/10000
+    double kdY = 9.977; //3/2
+    power_difference = proportionalY*kpY + integralY*kiY + derivativeY*kdY;
+    //double power_difference = proportionalY*kp + derivativeY*kd;
+    
+
+    nuevaVel = abs(int(power_difference))+minVel;
     if (power_difference >  255){
+      power_difference = 255;
       nuevaVel = 255;
-    } else if (power_difference < 0){
-      nuevaVel = minVel;
-    else {  
-      nuevaVel = abs(int(power_difference)+minVel));
+    } else if (power_difference < -255){
+      power_difference = -255;
+      nuevaVel = 255;
     }
 
-    if(roll>-0.1){
-       atras(nuevaVel,nuevaVel);
+    if (nuevaVel > 255){
+      nuevaVel = 255;
+    }
+
+    if(roll>-0.15){
+       adelante(nuevaVel,nuevaVel);
+      //Serial.println("Adelante");
+    }else if (roll < -0.5){
+      atras(nuevaVel,nuevaVel);
       //Serial.println("Atras");
-    }else if (roll < -0.7){
-      adelante(nuevaVel,nuevaVel);
-      //Serial.println("Adelante");  
+      //Serial.println(nuevaVel);  
     } else{
       parar();  
       //Serial.println("Detenido");
     }
-    Serial.println("Power difference");
-    Serial.println(nuevaVel);
-    //delay(1000);
+    //Serial.println(roll);
+    delay(50);
     
 }
+
